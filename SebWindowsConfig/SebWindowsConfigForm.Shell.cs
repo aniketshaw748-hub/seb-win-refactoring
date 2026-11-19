@@ -672,13 +672,15 @@ namespace SebWindowsConfig
 
 		/// <summary>
 		/// Before saving: with URL filtering on, the start URL must be a link the filter rules can express. An IPv6 address
-		/// can't be, so SEB would block the exam itself. Shows why and returns false in that case.
+		/// can't be written as a simple rule (and SEB's automatic start URL rule fails on it too), so SEB would block the
+		/// exam itself, unless an active regular expression rule allows the link. Shows why and returns false otherwise.
 		/// </summary>
 		private bool IsStartUrlFilterable()
 		{
 			var filtering = SEBSettings.settingsCurrent.TryGetValue(SEBSettings.KeyURLFilterEnable, out var value) && value is bool on && on;
+			var url = textBoxStartURL.Text.Trim();
 
-			if (filtering && Uri.TryCreate(textBoxStartURL.Text.Trim(), UriKind.Absolute, out var uri) && uri.HostNameType == UriHostNameType.IPv6)
+			if (filtering && Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.HostNameType == UriHostNameType.IPv6 && !IsAllowedByRegexRule(url))
 			{
 				MessageBox.Show(this, "The exam link is an IPv6 address, which SEB's website rules can't express, so SEB would block the exam. Use a host name for the exam link instead (e.g. http://localhost:8080), or switch off URL filtering.", "Check the exam link", MessageBoxButtons.OK, MessageBoxIcon.Warning);
 
@@ -686,6 +688,36 @@ namespace SebWindowsConfig
 			}
 
 			return true;
+		}
+
+		/// <summary>
+		/// True if an active regular expression allow rule matches the link (the browser matches the whole URL).
+		/// </summary>
+		private static bool IsAllowedByRegexRule(string url)
+		{
+			if (!(SEBSettings.settingsCurrent.TryGetValue(SEBSettings.KeyURLFilterRules, out var value) && value is IEnumerable<object> rules))
+			{
+				return false;
+			}
+
+			foreach (var rule in rules.OfType<IDictionary<string, object>>().Select(FilterRule.FromConfig))
+			{
+				if (rule.IsActive && rule.IsRegex && rule.Action == FilterAction.Allow && !string.IsNullOrEmpty(rule.Expression))
+				{
+					try
+					{
+						if (System.Text.RegularExpressions.Regex.IsMatch(url, rule.Expression, System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+						{
+							return true;
+						}
+					}
+					catch (ArgumentException)
+					{
+					}
+				}
+			}
+
+			return false;
 		}
 
 		bool IQuickSetupHost.IsNewConfiguration => currentPathSebConfigFile == SEBUIStrings.settingsTitleDefaultSettings;

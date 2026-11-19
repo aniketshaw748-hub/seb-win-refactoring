@@ -1630,6 +1630,7 @@ namespace SebWindowsConfig
 		{
 			// Check if there are unconfirmed passwords, if yes show an alert and abort saving
 			if (ArePasswordsUnconfirmed()) return;
+			if (!IsStartUrlFilterable()) return;
 
 			// Get the path to the local client settings configuration file
 			StringBuilder sebClientSettingsAppDataBuilder = new StringBuilder(SEBClientInfo.SebClientSettingsAppDataDirectory).Append(SEBClientInfo.SEB_CLIENT_CONFIG);

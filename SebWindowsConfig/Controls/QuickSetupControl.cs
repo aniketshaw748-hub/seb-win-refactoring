@@ -680,6 +680,11 @@ namespace SebWindowsConfig.Controls
 			{
 				ownedExamRules = new List<string>();
 			}
+			else if (ownedExamRules != null)
+			{
+				// Retained rules someone deleted in All settings meanwhile are no longer owned (and won't be written back).
+				ownedExamRules = ownedExamRules.Where(r => access.AllowedSites.Contains(r, StringComparer.OrdinalIgnoreCase)).ToList();
+			}
 
 			// While the exam link is empty or half typed, the rules for the last full link stay owned (and hidden here).
 			var hidden = examRules.Concat(ownedExamRules ?? new List<string>()).ToList();
@@ -707,8 +712,10 @@ namespace SebWindowsConfig.Controls
 			if (examRules.Count == 0)
 			{
 				// No usable exam link yet (empty, half typed or an IPv6 address): keep the rules for the last full link
-				// until a usable one replaces them.
-				examRules = ownedExamRules ?? new List<string>();
+				// until a usable one replaces them, as far as they are still in the current rules.
+				var current = host.SiteAccess.AllowedSites;
+
+				examRules = (ownedExamRules ?? new List<string>()).Where(r => current.Contains(r, StringComparer.OrdinalIgnoreCase)).ToList();
 			}
 
 			ownedExamRules = examRules;
