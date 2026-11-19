@@ -145,6 +145,7 @@
     <Compile Include="Entities\FilterRule.cs" />
     <Compile Include="Entities\PermittedApplicationInformation.cs" />
     <Compile Include="Entities\SecurityPreset.cs" />
+    <Compile Include="Entities\SiteAccess.cs" />
     <Compile Include="Entities\StudentOption.cs" />
     <Compile Include="SebPasswordDialogForm.cs">
       <SubType>Form</SubType>

@@ -1,4 +1,5 @@
-﻿using SebWindowsConfig.Entities;
+﻿using System.Collections.Generic;
+using SebWindowsConfig.Entities;
 
 namespace SebWindowsConfig.Controls
 {
@@ -41,6 +42,16 @@ namespace SebWindowsConfig.Controls
 
 		bool GetOption(StudentOption option);
 		void SetOption(StudentOption option, bool enabled);
+
+		/// <summary>
+		/// Which websites students can open (the URL filter).
+		/// </summary>
+		SiteAccess SiteAccess { get; }
+
+		/// <summary>
+		/// Turns the URL filter on (only the given sites, plus the start URL) or off (any website), replacing its rules.
+		/// </summary>
+		void SetSiteAccess(bool restricted, IEnumerable<string> allowedSites);
 
 		SecurityPreset CurrentPreset { get; }
 		void ApplyPreset(SecurityPreset preset);

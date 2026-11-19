@@ -675,32 +675,7 @@ namespace SebWindowsConfig
 			}
 
 			// Add Url Filters
-			var filterControl = new FilterRuleControl();
-
-			SEBSettings.urlFilterRuleList = SEBSettings.settingsCurrent[SEBSettings.KeyURLFilterRules] as ListObj;
-
-			foreach (DictObj config in SEBSettings.urlFilterRuleList)
-			{
-				var rule = FilterRule.FromConfig(config);
-
-				filterControl.AddRule(rule);
-			}
-
-			filterControl.Dock = DockStyle.Fill;
-			filterControl.DataChanged += (rules) =>
-			{
-				SEBSettings.urlFilterRuleList.Clear();
-
-				foreach (var rule in rules)
-				{
-					var config = FilterRule.ToConfig(rule);
-
-					SEBSettings.urlFilterRuleList.Add(config);
-				}
-			};
-
-			UrlFilterContainer.Controls.Clear();
-			UrlFilterContainer.Controls.Add(filterControl);
+			LoadUrlFilterRules();
 
 			// Add Embedded Certificates of Certificate Store to DataGridView
 			for (int index = 0; index < SEBSettings.embeddedCertificateList.Count; index++)
@@ -3450,6 +3425,44 @@ namespace SebWindowsConfig
 		private void buttonProhibitedProcessCodeSignature_Click(object sender, EventArgs e)
 		{
 
+		}
+
+		/// <summary>
+		/// Shows the URL filter rules of the current settings in the filter rule editor (Network > Filter).
+		/// </summary>
+		private void LoadUrlFilterRules()
+		{
+			var filterControl = new FilterRuleControl();
+
+			SEBSettings.urlFilterRuleList = SEBSettings.settingsCurrent[SEBSettings.KeyURLFilterRules] as ListObj;
+
+			foreach (DictObj config in SEBSettings.urlFilterRuleList)
+			{
+				var rule = FilterRule.FromConfig(config);
+
+				filterControl.AddRule(rule);
+			}
+
+			filterControl.Dock = DockStyle.Fill;
+			filterControl.DataChanged += (rules) =>
+			{
+				SEBSettings.urlFilterRuleList.Clear();
+
+				foreach (var rule in rules)
+				{
+					var config = FilterRule.ToConfig(rule);
+
+					SEBSettings.urlFilterRuleList.Add(config);
+				}
+			};
+
+			foreach (var previous in UrlFilterContainer.Controls.Cast<Control>().ToList())
+			{
+				previous.Dispose();
+			}
+
+			UrlFilterContainer.Controls.Clear();
+			UrlFilterContainer.Controls.Add(filterControl);
 		}
 
 		private void checkBoxEnableURLFilter_CheckedChanged(object sender, EventArgs e)

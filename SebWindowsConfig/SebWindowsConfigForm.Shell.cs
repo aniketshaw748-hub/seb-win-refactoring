@@ -597,6 +597,30 @@ namespace SebWindowsConfig
 			}
 		}
 
+		SiteAccess IQuickSetupHost.SiteAccess => SiteAccess.Read(SEBSettings.settingsCurrent);
+
+		void IQuickSetupHost.SetSiteAccess(bool restricted, IEnumerable<string> allowedSites)
+		{
+			var rules = SEBSettings.settingsCurrent[SEBSettings.KeyURLFilterRules] as List<object>;
+
+			if (rules == null)
+			{
+				rules = new List<object>();
+				SEBSettings.settingsCurrent[SEBSettings.KeyURLFilterRules] = rules;
+			}
+
+			rules.Clear();
+
+			foreach (var site in allowedSites.Distinct(StringComparer.OrdinalIgnoreCase))
+			{
+				rules.Add(FilterRule.ToConfig(new FilterRule { IsActive = true, IsRegex = false, Expression = site, Action = FilterAction.Allow }));
+			}
+
+			// Show the new rules in All settings > Network > Filter; its check box handler stores the on/off state.
+			LoadUrlFilterRules();
+			checkBoxEnableURLFilter.Checked = restricted;
+		}
+
 		SecurityPreset IQuickSetupHost.CurrentPreset => SecurityPreset.Detect(SEBSettings.settingsCurrent);
 
 		bool IQuickSetupHost.HasStoredPassword(PasswordKind kind)

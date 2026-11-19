@@ -11,16 +11,17 @@ using SebWindowsConfig.UserInterface;
 namespace SebWindowsConfig.Controls
 {
 	/// <summary>
-	/// The guided five step setup shown when the configuration tool starts. It covers what most exams need: the exam link,
-	/// how students may leave, which tools they get, how locked down the computer is and saving the file. Every change is
-	/// applied through <see cref="IQuickSetupHost"/>, so the full settings view always reflects the same configuration.
+	/// The guided six step setup shown when the configuration tool starts. It covers what most exams need: the exam link,
+	/// which websites students can open, how they may leave, which tools they get, how locked down the computer is and
+	/// saving the file. Every change is applied through <see cref="IQuickSetupHost"/>, so the full settings view always
+	/// reflects the same configuration.
 	/// </summary>
 	internal class QuickSetupControl : UserControl
 	{
 		private const int RailWidth = 280;
 		private const int PageWidth = 640;
 
-		private static readonly string[] StepTitles = { "Exam link", "Leaving the exam", "Tools for students", "Lockdown level", "Save and share" };
+		private static readonly string[] StepTitles = { "Exam link", "Allowed websites", "Leaving the exam", "Tools for students", "Lockdown level", "Save and share" };
 
 		private readonly IQuickSetupHost host;
 		private readonly List<StepButton> stepButtons = new List<StepButton>();
@@ -39,6 +40,18 @@ namespace SebWindowsConfig.Controls
 		private Label urlStatus;
 		private Button urlFixButton;
 		private Button urlOpenButton;
+
+		private CardRadioButton onlyExamSiteCard;
+		private CardRadioButton anySiteCard;
+		private Control customSitesPanel;
+		private Control siteListPanel;
+		private Label examSiteLabel;
+		private TextBox extraSitesBox;
+		private Label extraSitesStatus;
+		private Control signInHint;
+		private Label signInLabel;
+		private Button signInButton;
+		private bool sitesCustom;
 
 		private ToggleSwitch allowQuitSwitch;
 		private PasswordFields quitPassword;
@@ -73,6 +86,7 @@ namespace SebWindowsConfig.Controls
 			try
 			{
 				urlTextBox.Text = host.StartUrl ?? "";
+				RefreshSiteAccess();
 				allowQuitSwitch.Checked = host.AllowQuit;
 				quitPassword.Refresh(host);
 				adminPassword.Refresh(host);
@@ -94,6 +108,7 @@ namespace SebWindowsConfig.Controls
 			}
 
 			UpdateUrlStatus();
+			UpdateSiteFields();
 			UpdateQuitFields();
 			UpdateSummary();
 			UpdateRail();
@@ -174,6 +189,7 @@ namespace SebWindowsConfig.Controls
 			};
 
 			pages.Add(BuildExamLinkPage());
+			pages.Add(BuildSitesPage());
 			pages.Add(BuildLeavingPage());
 			pages.Add(BuildToolsPage());
 			pages.Add(BuildLockdownPage());
@@ -211,7 +227,7 @@ namespace SebWindowsConfig.Controls
 
 			list.Controls.Add(Theme.Label("Quick setup", Theme.Subtitle));
 			list.Controls.Add(Spacer(4));
-			list.Controls.Add(Theme.WrappingLabel("Set up an exam in five steps. You can change anything later.", RailWidth - 40, Theme.Small, Theme.MutedText));
+			list.Controls.Add(Theme.WrappingLabel("Set up an exam in six steps. You can change anything later.", RailWidth - 40, Theme.Small, Theme.MutedText));
 			list.Controls.Add(Spacer(18));
 
 			for (var i = 0; i < StepTitles.Length; i++)
@@ -354,10 +370,14 @@ namespace SebWindowsConfig.Controls
 				if (!refreshing)
 				{
 					host.StartUrl = urlTextBox.Text.Trim();
+
+					// The allowed websites include the exam site, so they follow the link.
+					ApplySiteAccess();
 					UpdateRail();
 				}
 
 				UpdateUrlStatus();
+				UpdateSiteFields();
 			};
 
 			urlOpenButton = Theme.SecondaryButton("Open link");
@@ -470,7 +490,236 @@ namespace SebWindowsConfig.Controls
 		}
 
 		// ------------------------------------------------------------------------------------------------------------
-		// Step 2: Leaving the exam
+		// Step 2: Allowed websites
+		// ------------------------------------------------------------------------------------------------------------
+
+		private Control BuildSitesPage()
+		{
+			var page = Page("Which websites can students open?", "If students can follow links, they can get from your exam to search engines and AI chatbots inside SEB. Limit SEB to your exam site to stop that.");
+
+			var cards = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.TopDown, Margin = new Padding(0), WrapContents = false };
+
+			onlyExamSiteCard = new CardRadioButton("Only the exam site", "Students can open your exam and the extra sites you list below. Every other link is blocked, e.g. Google search, Gemini or ChatGPT.", null, PageWidth) { Badge = "Recommended" };
+			anySiteCard = new CardRadioButton("Any website", "Students can follow links to any website. Use this only if the exam needs the open web.", null, PageWidth);
+
+			foreach (var card in new[] { onlyExamSiteCard, anySiteCard })
+			{
+				var current = card;
+
+				current.CheckedChanged += (o, e) =>
+				{
+					if (!refreshing && current.Checked)
+					{
+						ApplySiteAccess();
+					}
+
+					UpdateSiteFields();
+					UpdateRail();
+				};
+
+				cards.Controls.Add(current);
+			}
+
+			page.Controls.Add(cards);
+
+			var custom = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.TopDown, Margin = new Padding(0, 4, 0, 12), WrapContents = false };
+			var customNote = Theme.WrappingLabel("These settings have their own website rules, set up in All settings > Network > Filter. Quick setup leaves them as they are.", PageWidth, Theme.Body, Theme.Warning);
+			var replace = Theme.LinkButton("Replace them with \"Only the exam site\"");
+
+			customNote.Margin = new Padding(0, 0, 0, 4);
+			replace.Click += (o, e) => ReplaceCustomSiteRules();
+			custom.Controls.Add(customNote);
+			custom.Controls.Add(replace);
+			customSitesPanel = custom;
+			page.Controls.Add(custom);
+
+			var list = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.TopDown, Margin = new Padding(0, 6, 0, 12), WrapContents = false };
+
+			list.Controls.Add(FieldLabel("Always allowed"));
+			examSiteLabel = Theme.WrappingLabel("", PageWidth, Theme.Body);
+			examSiteLabel.Margin = new Padding(0, 0, 0, 16);
+			list.Controls.Add(examSiteLabel);
+
+			list.Controls.Add(FieldLabel("Also allow (optional)"));
+
+			var hint = Theme.WrappingLabel("One site per line, e.g. accounts.google.com. A site includes its subdomains. Add a path with * to allow only part of a site, e.g. example.com/help/*", PageWidth, Theme.Small, Theme.MutedText);
+
+			hint.Margin = new Padding(0, 0, 0, 6);
+			list.Controls.Add(hint);
+
+			extraSitesBox = Theme.TextBox(470);
+			extraSitesBox.AcceptsReturn = true;
+			extraSitesBox.AccessibleName = "Also allowed websites";
+			extraSitesBox.Multiline = true;
+			extraSitesBox.Height = 84;
+			extraSitesBox.Margin = new Padding(0, 0, 0, 6);
+			extraSitesBox.TextChanged += (o, e) =>
+			{
+				if (!refreshing)
+				{
+					ApplySiteAccess();
+				}
+
+				UpdateSiteFields();
+				UpdateRail();
+			};
+			list.Controls.Add(extraSitesBox);
+
+			extraSitesStatus = Theme.Label("", Theme.Small, Theme.MutedText);
+			extraSitesStatus.Margin = new Padding(0, 0, 0, 10);
+			list.Controls.Add(extraSitesStatus);
+
+			var signIn = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight, Margin = new Padding(0), WrapContents = false };
+
+			signInLabel = Theme.Label("", Theme.Body, Theme.Text);
+			signInLabel.Margin = new Padding(0, 6, 10, 0);
+			signInButton = Theme.SecondaryButton("Add sign-in");
+			signInButton.Margin = new Padding(0);
+			signInButton.Click += (o, e) => AddSignInSite();
+			signIn.Controls.Add(signInLabel);
+			signIn.Controls.Add(signInButton);
+			signInHint = signIn;
+			list.Controls.Add(signIn);
+
+			siteListPanel = list;
+			page.Controls.Add(list);
+
+			page.Controls.Add(Tip("Test it: open the saved file in SEB and click a few links on your exam page. A blocked link shows a message instead of the page."));
+
+			return page;
+		}
+
+		private void RefreshSiteAccess()
+		{
+			var access = host.SiteAccess;
+			var examRules = SiteAccess.ExamSiteRules(host.StartUrl);
+
+			sitesCustom = access.IsCustom;
+			onlyExamSiteCard.Checked = access.Restricted;
+			anySiteCard.Checked = !access.Restricted;
+			extraSitesBox.Text = string.Join(Environment.NewLine, access.AllowedSites.Where(s => !examRules.Contains(s, StringComparer.OrdinalIgnoreCase)));
+		}
+
+		/// <summary>
+		/// Writes the chosen websites to the URL filter: the exam site (it follows the exam link) and the extra sites.
+		/// Rules set up in the full editor are kept until the user replaces them.
+		/// </summary>
+		private void ApplySiteAccess()
+		{
+			if (sitesCustom || onlyExamSiteCard == null)
+			{
+				return;
+			}
+
+			host.SetSiteAccess(onlyExamSiteCard.Checked, SiteAccess.ExamSiteRules(urlTextBox.Text).Concat(ExtraSites()));
+		}
+
+		private void ReplaceCustomSiteRules()
+		{
+			var answer = MessageBox.Show(this, "This removes the website rules set up in All settings > Network > Filter and allows only your exam site.\n\nReplace the rules?", "Allowed websites", MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2);
+
+			if (answer != DialogResult.Yes)
+			{
+				return;
+			}
+
+			var wasRefreshing = refreshing;
+
+			refreshing = true;
+
+			try
+			{
+				sitesCustom = false;
+				onlyExamSiteCard.Checked = true;
+				extraSitesBox.Text = "";
+			}
+			finally
+			{
+				refreshing = wasRefreshing;
+			}
+
+			ApplySiteAccess();
+			UpdateSiteFields();
+			UpdateRail();
+		}
+
+		private void AddSignInSite()
+		{
+			var signIn = SiteAccess.SignInFor(urlTextBox.Text);
+
+			if (signIn != null)
+			{
+				var text = extraSitesBox.Text.TrimEnd();
+
+				extraSitesBox.Text = text.Length == 0 ? signIn.Site : text + Environment.NewLine + signIn.Site;
+			}
+		}
+
+		private IList<string> ExtraSites()
+		{
+			return SiteLines().Where(SiteAccess.IsValidSite).ToList();
+		}
+
+		private IEnumerable<string> SiteLines()
+		{
+			return (extraSitesBox?.Text ?? "").Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).Select(l => l.Trim()).Where(l => l.Length > 0);
+		}
+
+		private void UpdateSiteFields()
+		{
+			if (siteListPanel == null)
+			{
+				return;
+			}
+
+			var examRules = SiteAccess.ExamSiteRules(urlTextBox.Text);
+			var signIn = SiteAccess.SignInFor(urlTextBox.Text);
+			var invalid = SiteLines().Count(l => !SiteAccess.IsValidSite(l));
+
+			onlyExamSiteCard.Enabled = !sitesCustom;
+			anySiteCard.Enabled = !sitesCustom;
+			customSitesPanel.Visible = sitesCustom;
+			siteListPanel.Visible = !sitesCustom && onlyExamSiteCard.Checked;
+
+			examSiteLabel.Text = examRules.Count == 0 ? "Your exam site (add the exam link in step 1)" : string.Join(", ", examRules) + "   (your exam)";
+			examSiteLabel.ForeColor = examRules.Count == 0 ? Theme.MutedText : Theme.Text;
+
+			SetStatus(extraSitesStatus, invalid == 0 ? "" : invalid == 1 ? "One line isn't a website and is ignored. Use a site name like example.com, without spaces." : $"{invalid} lines aren't websites and are ignored. Use site names like example.com, without spaces.", Theme.Warning);
+			extraSitesStatus.Visible = invalid > 0;
+
+			signInHint.Visible = signIn != null && !ExtraSites().Contains(signIn.Site, StringComparer.OrdinalIgnoreCase);
+
+			if (signIn != null)
+			{
+				signInLabel.Text = $"{signIn.Provider} may ask students to sign in before the exam.";
+				signInButton.Text = $"Allow {signIn.Provider} sign-in";
+			}
+		}
+
+		private string SitesSummary(bool forRail)
+		{
+			if (sitesCustom)
+			{
+				return forRail ? "Custom rules" : "Custom website rules (All settings > Network > Filter)";
+			}
+
+			if (!onlyExamSiteCard.Checked)
+			{
+				return forRail ? "Any website" : "Students can open any website";
+			}
+
+			var extra = ExtraSites().Count;
+
+			if (forRail)
+			{
+				return extra == 0 ? "Only the exam site" : $"Exam site + {extra} more";
+			}
+
+			return "Students can open only: " + string.Join(", ", SiteAccess.ExamSiteRules(urlTextBox.Text).Concat(ExtraSites()).DefaultIfEmpty("the exam link"));
+		}
+
+		// ------------------------------------------------------------------------------------------------------------
+		// Step 3: Leaving the exam
 		// ------------------------------------------------------------------------------------------------------------
 
 		private Control BuildLeavingPage()
@@ -520,7 +769,7 @@ namespace SebWindowsConfig.Controls
 		}
 
 		// ------------------------------------------------------------------------------------------------------------
-		// Step 3: Tools for students
+		// Step 4: Tools for students
 		// ------------------------------------------------------------------------------------------------------------
 
 		private Control BuildToolsPage()
@@ -557,7 +806,7 @@ namespace SebWindowsConfig.Controls
 		}
 
 		// ------------------------------------------------------------------------------------------------------------
-		// Step 4: Lockdown level
+		// Step 5: Lockdown level
 		// ------------------------------------------------------------------------------------------------------------
 
 		private Control BuildLockdownPage()
@@ -635,7 +884,7 @@ namespace SebWindowsConfig.Controls
 		}
 
 		// ------------------------------------------------------------------------------------------------------------
-		// Step 5: Save and share
+		// Step 6: Save and share
 		// ------------------------------------------------------------------------------------------------------------
 
 		private Control BuildSavePage()
@@ -708,6 +957,7 @@ namespace SebWindowsConfig.Controls
 			var rows = new List<Tuple<bool, string>>
 			{
 				Tuple.Create(IsValidUrl(url), IsValidUrl(url) ? "Opens " + Shorten(url, 70) : "No valid exam link yet"),
+				Tuple.Create(sitesCustom || onlyExamSiteCard.Checked, SitesSummary(false)),
 				Tuple.Create(true, QuitSummary()),
 				Tuple.Create(true, tools.Count == 0 ? "No extra tools for students" : "Students can use: " + string.Join(", ", tools)),
 				Tuple.Create(true, preset == null ? "Custom lockdown settings" : preset.Title + " lockdown"),
@@ -761,10 +1011,12 @@ namespace SebWindowsConfig.Controls
 
 			stepButtons[0].Summary = IsValidUrl(url) ? HostOf(url) : url.Length == 0 ? "Not set yet" : "Check the link";
 			stepButtons[0].NeedsAttention = !IsValidUrl(url);
-			stepButtons[1].Summary = !host.AllowQuit ? "Students can't quit" : host.HasPassword(PasswordKind.Quit) ? "Quit password set" : "No quit password";
-			stepButtons[2].Summary = toolCount == 1 ? "1 tool on" : $"{toolCount} tools on";
-			stepButtons[3].Summary = preset == null ? "Custom" : preset.Title;
-			stepButtons[4].Summary = host.StartsExam ? "Starts an exam" : "Configures computers";
+			stepButtons[1].Summary = SitesSummary(true);
+			stepButtons[1].NeedsAttention = !sitesCustom && !onlyExamSiteCard.Checked;
+			stepButtons[2].Summary = !host.AllowQuit ? "Students can't quit" : host.HasPassword(PasswordKind.Quit) ? "Quit password set" : "No quit password";
+			stepButtons[3].Summary = toolCount == 1 ? "1 tool on" : $"{toolCount} tools on";
+			stepButtons[4].Summary = preset == null ? "Custom" : preset.Title;
+			stepButtons[5].Summary = host.StartsExam ? "Starts an exam" : "Configures computers";
 
 			for (var i = 0; i < stepButtons.Count; i++)
 			{
