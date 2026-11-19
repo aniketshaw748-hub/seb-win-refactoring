@@ -128,6 +128,7 @@ namespace SebWindowsConfig
 			textBoxConfigurationKey.Text = SEBProtectionController.ComputeConfigurationKey();
 
 			LoadVersionInfo();
+			InitialiseShell();
 
 		} // end of contructor   SebWindowsConfigForm()
 
@@ -211,6 +212,7 @@ namespace SebWindowsConfig
 			currentFileSebConfigFile = Path.GetFileName(fileName);
 			currentPathSebConfigFile = Path.GetFullPath(fileName);
 
+			settingsReplaced = true;
 			UpdateAllWidgetsOfProgram();
 			buttonRevertToLastOpened.Enabled = true;
 			Cursor.Current = Cursors.Default;
@@ -291,6 +293,8 @@ namespace SebWindowsConfig
 		// *****************************************************
 		private void UpdateAllWidgetsOfProgram()
 		{
+			BeginWidgetReload();
+
 			// Update the filename in the title bar
 			this.Text = this.ProductName;
 			this.Text += " - ";
@@ -674,32 +678,7 @@ namespace SebWindowsConfig
 			}
 
 			// Add Url Filters
-			var filterControl = new FilterRuleControl();
-
-			SEBSettings.urlFilterRuleList = SEBSettings.settingsCurrent[SEBSettings.KeyURLFilterRules] as ListObj;
-
-			foreach (DictObj config in SEBSettings.urlFilterRuleList)
-			{
-				var rule = FilterRule.FromConfig(config);
-
-				filterControl.AddRule(rule);
-			}
-
-			filterControl.Dock = DockStyle.Fill;
-			filterControl.DataChanged += (rules) =>
-			{
-				SEBSettings.urlFilterRuleList.Clear();
-
-				foreach (var rule in rules)
-				{
-					var config = FilterRule.ToConfig(rule);
-
-					SEBSettings.urlFilterRuleList.Add(config);
-				}
-			};
-
-			UrlFilterContainer.Controls.Clear();
-			UrlFilterContainer.Controls.Add(filterControl);
+			LoadUrlFilterRules();
 
 			// Add Embedded Certificates of Certificate Store to DataGridView
 			for (int index = 0; index < SEBSettings.embeddedCertificateList.Count; index++)
@@ -901,6 +880,8 @@ namespace SebWindowsConfig
 
 			checkBoxShowTime.Checked = (Boolean) SEBSettings.settingsCurrent[SEBSettings.KeyShowTime];
 			checkBoxShowKeyboardLayout.Checked = (Boolean) SEBSettings.settingsCurrent[SEBSettings.KeyShowInputLanguage];
+
+			OnSettingsReloaded();
 
 			return;
 		}
@@ -1340,6 +1321,7 @@ namespace SebWindowsConfig
 		{
 			// Check if there are unconfirmed passwords, if yes show an alert and abort saving
 			if (ArePasswordsUnconfirmed()) return false;
+			if (!IsStartUrlFilterable()) return false;
 
 			StringBuilder sebClientSettingsAppDataBuilder = new StringBuilder(currentDireSebConfigFile).Append(@"\").Append(currentFileSebConfigFile);
 			String fileName = sebClientSettingsAppDataBuilder.ToString();
@@ -1396,6 +1378,7 @@ namespace SebWindowsConfig
 		{
 			// Check if there are unconfirmed passwords, if yes show an alert and abort saving
 			if (ArePasswordsUnconfirmed()) return;
+			if (!IsStartUrlFilterable()) return;
 
 			// Set the default directory and file name in the File Dialog
 			saveFileDialogSebConfigFile.InitialDirectory = currentDireSebConfigFile;
@@ -1490,6 +1473,7 @@ namespace SebWindowsConfig
 			// which are necessary for compatibility to SEB 2.1.x
 			urlFilter.UpdateFilterRules();
 
+			settingsReplaced = true;
 			UpdateAllWidgetsOfProgram();
 			// Generate Browser Exam Key of default settings
 			string currentBrowserExamKey = SEBProtectionController.ComputeBrowserExamKey();
@@ -1533,6 +1517,7 @@ namespace SebWindowsConfig
 				// Update URL filter rules, also the seb-Browser white/blacklist keys, 
 				// which are necessary for compatibility to SEB 2.1.x
 				urlFilter.UpdateFilterRules();
+				settingsReplaced = true;
 				UpdateAllWidgetsOfProgram();
 			}
 			// Generate Browser Exam Key of this new settings
@@ -1645,6 +1630,7 @@ namespace SebWindowsConfig
 		{
 			// Check if there are unconfirmed passwords, if yes show an alert and abort saving
 			if (ArePasswordsUnconfirmed()) return;
+			if (!IsStartUrlFilterable()) return;
 
 			// Get the path to the local client settings configuration file
 			StringBuilder sebClientSettingsAppDataBuilder = new StringBuilder(SEBClientInfo.SebClientSettingsAppDataDirectory).Append(SEBClientInfo.SEB_CLIENT_CONFIG);
@@ -3447,6 +3433,44 @@ namespace SebWindowsConfig
 		private void buttonProhibitedProcessCodeSignature_Click(object sender, EventArgs e)
 		{
 
+		}
+
+		/// <summary>
+		/// Shows the URL filter rules of the current settings in the filter rule editor (Network > Filter).
+		/// </summary>
+		private void LoadUrlFilterRules()
+		{
+			var filterControl = new FilterRuleControl();
+
+			SEBSettings.urlFilterRuleList = SEBSettings.settingsCurrent[SEBSettings.KeyURLFilterRules] as ListObj;
+
+			foreach (DictObj config in SEBSettings.urlFilterRuleList)
+			{
+				var rule = FilterRule.FromConfig(config);
+
+				filterControl.AddRule(rule);
+			}
+
+			filterControl.Dock = DockStyle.Fill;
+			filterControl.DataChanged += (rules) =>
+			{
+				SEBSettings.urlFilterRuleList.Clear();
+
+				foreach (var rule in rules)
+				{
+					var config = FilterRule.ToConfig(rule);
+
+					SEBSettings.urlFilterRuleList.Add(config);
+				}
+			};
+
+			foreach (var previous in UrlFilterContainer.Controls.Cast<Control>().ToList())
+			{
+				previous.Dispose();
+			}
+
+			UrlFilterContainer.Controls.Clear();
+			UrlFilterContainer.Controls.Add(filterControl);
 		}
 
 		private void checkBoxEnableURLFilter_CheckedChanged(object sender, EventArgs e)

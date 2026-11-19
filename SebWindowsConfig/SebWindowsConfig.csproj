@@ -131,9 +131,22 @@
     <Compile Include="Controls\FilterRuleControl.Designer.cs">
       <DependentUpon>FilterRuleControl.cs</DependentUpon>
     </Compile>
+    <Compile Include="Controls\CardRadioButton.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="Controls\IQuickSetupHost.cs" />
+    <Compile Include="Controls\QuickSetupControl.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="Controls\ToggleSwitch.cs">
+      <SubType>Component</SubType>
+    </Compile>
     <Compile Include="Entities\FilterAction.cs" />
     <Compile Include="Entities\FilterRule.cs" />
     <Compile Include="Entities\PermittedApplicationInformation.cs" />
+    <Compile Include="Entities\SecurityPreset.cs" />
+    <Compile Include="Entities\SiteAccess.cs" />
+    <Compile Include="Entities\StudentOption.cs" />
     <Compile Include="SebPasswordDialogForm.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -149,6 +162,11 @@
     <Compile Include="SebWindowsConfigForm.Designer.cs">
       <DependentUpon>SebWindowsConfigForm.cs</DependentUpon>
     </Compile>
+    <Compile Include="SebWindowsConfigForm.Shell.cs">
+      <DependentUpon>SebWindowsConfigForm.cs</DependentUpon>
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="UserInterface\Theme.cs" />
     <Compile Include="SebWindowsConfigProgram.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Controls\AdditionalResources.cs">
@@ -166,6 +184,7 @@
     <Compile Include="SEBSettings.cs" />
     <Compile Include="Utilities\SEBConfigFileManager.cs" />
     <Compile Include="Utilities\SEBProtectionController.cs" />
+    <Compile Include="Utilities\SettingsSearchIndex.cs" />
     <Compile Include="Utilities\SEBURLFilter.cs" />
     <Compile Include="Utilities\SEBURLFilterExpression.cs" />
     <Compile Include="Utilities\SEBURLFilterRegexExpression.cs" />
