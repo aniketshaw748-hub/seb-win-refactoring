@@ -128,6 +128,7 @@ namespace SebWindowsConfig
 			textBoxConfigurationKey.Text = SEBProtectionController.ComputeConfigurationKey();
 
 			LoadVersionInfo();
+			InitialiseShell();
 
 		} // end of contructor   SebWindowsConfigForm()
 
@@ -901,6 +902,8 @@ namespace SebWindowsConfig
 
 			checkBoxShowTime.Checked = (Boolean) SEBSettings.settingsCurrent[SEBSettings.KeyShowTime];
 			checkBoxShowKeyboardLayout.Checked = (Boolean) SEBSettings.settingsCurrent[SEBSettings.KeyShowInputLanguage];
+
+			OnSettingsReloaded();
 
 			return;
 		}
