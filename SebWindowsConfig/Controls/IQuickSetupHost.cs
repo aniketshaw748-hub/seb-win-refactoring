@@ -18,6 +18,11 @@ namespace SebWindowsConfig.Controls
 	{
 		string StartUrl { get; set; }
 		bool AllowQuit { get; set; }
+
+		/// <summary>
+		/// Whether SEB sends its Browser Exam Key and Configuration Key to the exam site, so e.g. Moodle can verify SEB.
+		/// </summary>
+		bool SendsExamKeys { get; set; }
 		bool StartsExam { get; set; }
 
 		/// <summary>

@@ -564,6 +564,12 @@ namespace SebWindowsConfig
 			set { checkBoxAllowQuit.Checked = value; }
 		}
 
+		public bool SendsExamKeys
+		{
+			get { return checkBoxSendBrowserExamKey.Checked; }
+			set { checkBoxSendBrowserExamKey.Checked = value; }
+		}
+
 		public bool StartsExam
 		{
 			get { return radioButtonStartingAnExam.Checked; }

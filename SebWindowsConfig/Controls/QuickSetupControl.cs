@@ -40,6 +40,7 @@ namespace SebWindowsConfig.Controls
 		private Label urlStatus;
 		private Button urlFixButton;
 		private Button urlOpenButton;
+		private ToggleSwitch examKeysSwitch;
 
 		private CardRadioButton onlyExamSiteCard;
 		private CardRadioButton anySiteCard;
@@ -86,6 +87,7 @@ namespace SebWindowsConfig.Controls
 			try
 			{
 				urlTextBox.Text = host.StartUrl ?? "";
+				examKeysSwitch.Checked = host.SendsExamKeys;
 				RefreshSiteAccess();
 				allowQuitSwitch.Checked = host.AllowQuit;
 				quitPassword.Refresh(host);
@@ -405,6 +407,20 @@ namespace SebWindowsConfig.Controls
 			statusRow.Controls.Add(urlStatus);
 			statusRow.Controls.Add(urlFixButton);
 			page.Controls.Add(statusRow);
+
+			examKeysSwitch = new ToggleSwitch("Let the exam site check that students use SEB", "Needed when your Moodle quiz (or another exam system) requires Safe Exam Browser: SEB then proves to the site that it runs with this file, and the site refuses other browsers. Google Forms can't check this.", PageWidth);
+			examKeysSwitch.AccessibleName = "Let the exam site check that students use SEB";
+			examKeysSwitch.CheckedChanged += (o, e) =>
+			{
+				if (!refreshing)
+				{
+					host.SendsExamKeys = examKeysSwitch.Checked;
+				}
+
+				UpdateSummary();
+			};
+			page.Controls.Add(examKeysSwitch);
+			page.Controls.Add(Spacer(12));
 
 			page.Controls.Add(Tip("Tip: open the link once with \"Open link\" to check it is the right page before you save the file."));
 
@@ -958,6 +974,7 @@ namespace SebWindowsConfig.Controls
 			{
 				Tuple.Create(IsValidUrl(url), IsValidUrl(url) ? "Opens " + Shorten(url, 70) : "No valid exam link yet"),
 				Tuple.Create(sitesCustom || onlyExamSiteCard.Checked, SitesSummary(false)),
+				Tuple.Create(true, examKeysSwitch.Checked ? "The exam site can check that students use SEB" : "The exam site doesn't check for SEB (students could open it in another browser)"),
 				Tuple.Create(true, QuitSummary()),
 				Tuple.Create(true, tools.Count == 0 ? "No extra tools for students" : "Students can use: " + string.Join(", ", tools)),
 				Tuple.Create(true, preset == null ? "Custom lockdown settings" : preset.Title + " lockdown"),
