@@ -66,6 +66,16 @@ namespace SebWindowsConfig
 			allSettingsView = BuildAllSettingsView();
 			quickSetup = new QuickSetupControl(this);
 
+			// The allowed websites include the exam site, so they follow an exam link typed in All settings > General too.
+			// Only a link the user types counts (the box has the focus), not one set while settings are loaded.
+			textBoxStartURL.TextChanged += (o, e) =>
+			{
+				if (textBoxStartURL.Focused)
+				{
+					quickSetup.OnStartUrlChangedElsewhere();
+				}
+			};
+
 			body.Controls.Add(allSettingsView);
 			body.Controls.Add(quickSetup);
 
@@ -622,10 +632,13 @@ namespace SebWindowsConfig
 				rules.Add(FilterRule.ToConfig(new FilterRule { IsActive = true, IsRegex = false, Expression = site, Action = FilterAction.Allow }));
 			}
 
-			// Show the new rules in All settings > Network > Filter; its check box handler stores the on/off state.
+			// Show the new rules in All settings > Network > Filter; the check box handlers store the on/off states.
 			LoadUrlFilterRules();
 			checkBoxEnableURLFilter.Checked = restricted;
+			checkBoxEnableURLContentFilter.Checked = false;
 		}
+
+		bool IQuickSetupHost.IsNewConfiguration => currentPathSebConfigFile == SEBUIStrings.settingsTitleDefaultSettings;
 
 		SecurityPreset IQuickSetupHost.CurrentPreset => SecurityPreset.Detect(SEBSettings.settingsCurrent);
 

@@ -52,7 +52,9 @@ namespace SebWindowsConfig.Controls
 		private Control signInHint;
 		private Label signInLabel;
 		private Button signInButton;
+		private Label shortLinkHint;
 		private bool sitesCustom;
+		private bool siteChoiceMade;
 
 		private ToggleSwitch allowQuitSwitch;
 		private PasswordFields quitPassword;
@@ -82,13 +84,15 @@ namespace SebWindowsConfig.Controls
 		/// </summary>
 		internal void RefreshFromHost()
 		{
+			var restrictSites = false;
+
 			refreshing = true;
 
 			try
 			{
 				urlTextBox.Text = host.StartUrl ?? "";
 				examKeysSwitch.Checked = host.SendsExamKeys;
-				RefreshSiteAccess();
+				restrictSites = RefreshSiteAccess();
 				allowQuitSwitch.Checked = host.AllowQuit;
 				quitPassword.Refresh(host);
 				adminPassword.Refresh(host);
@@ -107,6 +111,12 @@ namespace SebWindowsConfig.Controls
 			finally
 			{
 				refreshing = false;
+			}
+
+			if (restrictSites)
+			{
+				// New settings start with only the exam site allowed; "Any website" has to be chosen on purpose.
+				ApplySiteAccess();
 			}
 
 			UpdateUrlStatus();
@@ -526,6 +536,7 @@ namespace SebWindowsConfig.Controls
 				{
 					if (!refreshing && current.Checked)
 					{
+						siteChoiceMade = true;
 						ApplySiteAccess();
 					}
 
@@ -553,8 +564,13 @@ namespace SebWindowsConfig.Controls
 
 			list.Controls.Add(FieldLabel("Always allowed"));
 			examSiteLabel = Theme.WrappingLabel("", PageWidth, Theme.Body);
-			examSiteLabel.Margin = new Padding(0, 0, 0, 16);
+			examSiteLabel.Margin = new Padding(0, 0, 0, 4);
 			list.Controls.Add(examSiteLabel);
+
+			shortLinkHint = Theme.WrappingLabel("This is a short forms.gle link, so SEB can't tell which form it leads to and has to allow every Google Form. Paste the full form link (docs.google.com/forms/...) in step 1 to allow only your form.", PageWidth, Theme.Small, Theme.Warning);
+			shortLinkHint.Margin = new Padding(0, 0, 0, 4);
+			list.Controls.Add(shortLinkHint);
+			list.Controls.Add(Spacer(12));
 
 			list.Controls.Add(FieldLabel("Also allow (optional)"));
 
@@ -600,20 +616,27 @@ namespace SebWindowsConfig.Controls
 			siteListPanel = list;
 			page.Controls.Add(list);
 
-			page.Controls.Add(Tip("Test it: open the saved file in SEB and click a few links on your exam page. A blocked link shows a message instead of the page."));
+			page.Controls.Add(Tip("Test it: open the saved file in SEB and click a few links on your exam page. A blocked link shows a message instead of the page. SEB checks every page students open; things your exam page shows inside itself, like an embedded video, aren't checked."));
 
 			return page;
 		}
 
-		private void RefreshSiteAccess()
+		/// <summary>
+		/// Reads the allowed websites from the settings. Returns true if new settings should start with "Only the exam
+		/// site" (the caller applies it once refreshing is done); settings opened from a file keep their own choice.
+		/// </summary>
+		private bool RefreshSiteAccess()
 		{
 			var access = host.SiteAccess;
 			var examRules = SiteAccess.ExamSiteRules(host.StartUrl);
+			var restrictByDefault = !siteChoiceMade && host.IsNewConfiguration && !access.Restricted && !access.IsCustom && access.AllowedSites.Count == 0;
 
 			sitesCustom = access.IsCustom;
-			onlyExamSiteCard.Checked = access.Restricted;
-			anySiteCard.Checked = !access.Restricted;
+			onlyExamSiteCard.Checked = access.Restricted || restrictByDefault;
+			anySiteCard.Checked = !onlyExamSiteCard.Checked;
 			extraSitesBox.Text = string.Join(Environment.NewLine, access.AllowedSites.Where(s => !examRules.Contains(s, StringComparer.OrdinalIgnoreCase)));
+
+			return restrictByDefault;
 		}
 
 		/// <summary>
@@ -628,6 +651,29 @@ namespace SebWindowsConfig.Controls
 			}
 
 			host.SetSiteAccess(onlyExamSiteCard.Checked, SiteAccess.ExamSiteRules(urlTextBox.Text).Concat(ExtraSites()));
+		}
+
+		/// <summary>
+		/// Called when the exam link was typed in All settings: the exam site rule follows it there too.
+		/// </summary>
+		internal void OnStartUrlChangedElsewhere()
+		{
+			var wasRefreshing = refreshing;
+
+			refreshing = true;
+
+			try
+			{
+				urlTextBox.Text = host.StartUrl ?? "";
+			}
+			finally
+			{
+				refreshing = wasRefreshing;
+			}
+
+			ApplySiteAccess();
+			UpdateSiteFields();
+			UpdateRail();
 		}
 
 		private void ReplaceCustomSiteRules()
@@ -646,6 +692,7 @@ namespace SebWindowsConfig.Controls
 			try
 			{
 				sitesCustom = false;
+				siteChoiceMade = true;
 				onlyExamSiteCard.Checked = true;
 				extraSitesBox.Text = "";
 			}
@@ -697,10 +744,11 @@ namespace SebWindowsConfig.Controls
 			customSitesPanel.Visible = sitesCustom;
 			siteListPanel.Visible = !sitesCustom && onlyExamSiteCard.Checked;
 
-			examSiteLabel.Text = examRules.Count == 0 ? "Your exam site (add the exam link in step 1)" : string.Join(", ", examRules) + "   (your exam)";
+			examSiteLabel.Text = examRules.Count == 0 ? "Your exam site (add the exam link in step 1)" : string.Join(", ", examRules.Select(SiteAccess.Display)) + "   (your exam)";
 			examSiteLabel.ForeColor = examRules.Count == 0 ? Theme.MutedText : Theme.Text;
+			shortLinkHint.Visible = SiteAccess.IsShortFormLink(urlTextBox.Text);
 
-			SetStatus(extraSitesStatus, invalid == 0 ? "" : invalid == 1 ? "One line isn't a website and is ignored. Use a site name like example.com, without spaces." : $"{invalid} lines aren't websites and are ignored. Use site names like example.com, without spaces.", Theme.Warning);
+			SetStatus(extraSitesStatus, invalid == 0 ? "" : invalid == 1 ? "One line isn't a website and is ignored. Use a site name like example.com: no spaces, no * in the name, and a port from 1 to 65535." : $"{invalid} lines aren't websites and are ignored. Use site names like example.com: no spaces, no * in the name, and a port from 1 to 65535.", Theme.Warning);
 			extraSitesStatus.Visible = invalid > 0;
 
 			signInHint.Visible = signIn != null && !ExtraSites().Contains(signIn.Site, StringComparer.OrdinalIgnoreCase);
@@ -731,7 +779,7 @@ namespace SebWindowsConfig.Controls
 				return extra == 0 ? "Only the exam site" : $"Exam site + {extra} more";
 			}
 
-			return "Students can open only: " + string.Join(", ", SiteAccess.ExamSiteRules(urlTextBox.Text).Concat(ExtraSites()).DefaultIfEmpty("the exam link"));
+			return "Students can open only: " + string.Join(", ", SiteAccess.ExamSiteRules(urlTextBox.Text).Concat(ExtraSites()).Select(SiteAccess.Display).DefaultIfEmpty("the exam link"));
 		}
 
 		// ------------------------------------------------------------------------------------------------------------

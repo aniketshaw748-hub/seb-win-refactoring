@@ -55,8 +55,14 @@ namespace SebWindowsConfig.Controls
 
 		/// <summary>
 		/// Turns the URL filter on (only the given sites, plus the start URL) or off (any website), replacing its rules.
+		/// The embedded content filter is switched off, as quick setup only filters the pages students open.
 		/// </summary>
 		void SetSiteAccess(bool restricted, IEnumerable<string> allowedSites);
+
+		/// <summary>
+		/// True while the editor shows new settings that weren't opened from a file.
+		/// </summary>
+		bool IsNewConfiguration { get; }
 
 		SecurityPreset CurrentPreset { get; }
 		void ApplyPreset(SecurityPreset preset);
