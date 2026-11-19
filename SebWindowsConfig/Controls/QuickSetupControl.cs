@@ -55,6 +55,12 @@ namespace SebWindowsConfig.Controls
 		private Label shortLinkHint;
 		private bool sitesCustom;
 
+		/// <summary>
+		/// The exam-site rules quick setup made (or recognised) in the current website rules, or <c>null</c> if it doesn't
+		/// manage them (custom rules). Only these are swapped when the exam link changes.
+		/// </summary>
+		private IList<string> ownedExamRules;
+
 		private ToggleSwitch allowQuitSwitch;
 		private PasswordFields quitPassword;
 		private PasswordFields adminPassword;
@@ -347,6 +353,15 @@ namespace SebWindowsConfig.Controls
 		/// </summary>
 		internal bool ConfirmExamLink()
 		{
+			if (Uri.TryCreate(urlTextBox.Text.Trim(), UriKind.Absolute, out var uri) && uri.HostNameType == UriHostNameType.IPv6)
+			{
+				MessageBox.Show(this, "SEB's website rules can't limit students to an IPv6 address, so this file can't be saved with it.\n\nUse a host name for the exam link instead, e.g. http://localhost:8080", "Check the exam link", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+				ShowStep(0);
+				urlTextBox.Focus();
+
+				return false;
+			}
+
 			if (!IsValidUrl(urlTextBox.Text))
 			{
 				var answer = MessageBox.Show(this, "The exam link is missing or doesn't look like a web address, so students may not reach the exam.\n\nSave the file anyway?", "Check the exam link", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
@@ -646,9 +661,26 @@ namespace SebWindowsConfig.Controls
 			// A restricted policy without the rules quick setup would make for this exam link (e.g. only one path of the
 			// exam site) can't be shown here without changing what it allows, so it counts as custom too.
 			sitesCustom = access.IsCustom || (access.Restricted && !examRules.All(r => access.AllowedSites.Contains(r, StringComparer.OrdinalIgnoreCase)));
+
+			if (sitesCustom)
+			{
+				ownedExamRules = null;
+			}
+			else if (examRules.Count > 0 && examRules.All(r => access.AllowedSites.Contains(r, StringComparer.OrdinalIgnoreCase)))
+			{
+				ownedExamRules = examRules;
+			}
+			else if (examRules.Count > 0 || access.AllowedSites.Count == 0)
+			{
+				ownedExamRules = new List<string>();
+			}
+
+			// While the exam link is empty or half typed, the rules for the last full link stay owned (and hidden here).
+			var hidden = examRules.Concat(ownedExamRules ?? new List<string>()).ToList();
+
 			onlyExamSiteCard.Checked = access.Restricted || restrictByDefault;
 			anySiteCard.Checked = !onlyExamSiteCard.Checked;
-			extraSitesBox.Text = string.Join(Environment.NewLine, access.AllowedSites.Where(s => !examRules.Contains(s, StringComparer.OrdinalIgnoreCase)));
+			extraSitesBox.Text = string.Join(Environment.NewLine, access.AllowedSites.Where(s => !hidden.Contains(s, StringComparer.OrdinalIgnoreCase)));
 
 			return restrictByDefault;
 		}
@@ -664,7 +696,16 @@ namespace SebWindowsConfig.Controls
 				return;
 			}
 
-			host.SetSiteAccess(onlyExamSiteCard.Checked, SiteAccess.ExamSiteRules(urlTextBox.Text).Concat(ExtraSites()));
+			var examRules = SiteAccess.ExamSiteRules(urlTextBox.Text);
+
+			// A link SEB's rules can't express (e.g. an IPv6 address) would only produce an unusable rule.
+			if (examRules.Any(r => !SiteAccess.IsValidSite(r)))
+			{
+				return;
+			}
+
+			ownedExamRules = examRules;
+			host.SetSiteAccess(onlyExamSiteCard.Checked, examRules.Concat(ExtraSites()));
 		}
 
 		/// <summary>
@@ -674,15 +715,20 @@ namespace SebWindowsConfig.Controls
 		/// </summary>
 		internal void OnStartUrlChangedElsewhere()
 		{
-			var previousExamRules = SiteAccess.ExamSiteRules(urlTextBox.Text);
+			var newExamRules = SiteAccess.ExamSiteRules(host.StartUrl);
 			var access = host.SiteAccess;
-			var ownRules = !access.IsCustom && previousExamRules.All(r => access.AllowedSites.Contains(r, StringComparer.OrdinalIgnoreCase));
+			var owned = ownedExamRules;
+			var ownRules = owned != null && !access.IsCustom && owned.All(r => access.AllowedSites.Contains(r, StringComparer.OrdinalIgnoreCase));
 
-			if (ownRules && (access.Restricted || access.AllowedSites.Count > 0))
+			// An empty or half-typed link (or one the rules can't express) leaves the rules alone until a full link is there.
+			var usable = newExamRules.Count > 0 && newExamRules.All(SiteAccess.IsValidSite);
+
+			if (ownRules && usable && (access.Restricted || access.AllowedSites.Count > 0))
 			{
-				var others = access.AllowedSites.Where(s => !previousExamRules.Contains(s, StringComparer.OrdinalIgnoreCase)).ToList();
+				var others = access.AllowedSites.Where(s => !owned.Contains(s, StringComparer.OrdinalIgnoreCase)).ToList();
 
-				host.SetSiteAccess(access.Restricted, SiteAccess.ExamSiteRules(host.StartUrl).Concat(others));
+				ownedExamRules = newExamRules;
+				host.SetSiteAccess(access.Restricted, newExamRules.Concat(others));
 			}
 
 			var wasRefreshing = refreshing;

@@ -57,6 +57,26 @@ namespace SebWindowsConfig
 		/// </summary>
 		private bool reloadingWidgets;
 
+		/// <summary>
+		/// Set by the callers that replace the settings (file opened, settings reset) before they reload all widgets;
+		/// other reloads (e.g. after a kiosk mode change or saving) keep the configuration.
+		/// </summary>
+		private bool settingsReplaced;
+
+		/// <summary>
+		/// Marks the start of a widget reload. The mark is cleared when the reload finishes, and also once the message
+		/// loop runs again, so an exception during the reload can't leave it set.
+		/// </summary>
+		private void BeginWidgetReload()
+		{
+			reloadingWidgets = true;
+
+			if (IsHandleCreated)
+			{
+				BeginInvoke((Action) (() => reloadingWidgets = false));
+			}
+		}
+
 		private void InitialiseShell()
 		{
 			SuspendLayout();
@@ -101,6 +121,7 @@ namespace SebWindowsConfig
 			ResumeLayout(true);
 
 			shellReady = true;
+			settingsReplaced = true;
 			OnSettingsReloaded();
 			ShowQuickSetup();
 		}
@@ -136,10 +157,13 @@ namespace SebWindowsConfig
 				RememberStoredPasswords();
 			}
 
+			var replaced = settingsReplaced;
+
+			settingsReplaced = false;
+
 			if (!applyingQuickSetup)
 			{
-				// A preset reloads widgets but keeps the configuration; anything else may have replaced it.
-				quickSetup.RefreshFromHost(settingsReplaced: !keepStoredPasswords);
+				quickSetup.RefreshFromHost(settingsReplaced: replaced);
 			}
 		}
 

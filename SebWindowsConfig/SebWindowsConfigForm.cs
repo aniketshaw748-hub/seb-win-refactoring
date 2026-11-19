@@ -212,6 +212,7 @@ namespace SebWindowsConfig
 			currentFileSebConfigFile = Path.GetFileName(fileName);
 			currentPathSebConfigFile = Path.GetFullPath(fileName);
 
+			settingsReplaced = true;
 			UpdateAllWidgetsOfProgram();
 			buttonRevertToLastOpened.Enabled = true;
 			Cursor.Current = Cursors.Default;
@@ -292,7 +293,7 @@ namespace SebWindowsConfig
 		// *****************************************************
 		private void UpdateAllWidgetsOfProgram()
 		{
-			reloadingWidgets = true;
+			BeginWidgetReload();
 
 			// Update the filename in the title bar
 			this.Text = this.ProductName;
@@ -1470,6 +1471,7 @@ namespace SebWindowsConfig
 			// which are necessary for compatibility to SEB 2.1.x
 			urlFilter.UpdateFilterRules();
 
+			settingsReplaced = true;
 			UpdateAllWidgetsOfProgram();
 			// Generate Browser Exam Key of default settings
 			string currentBrowserExamKey = SEBProtectionController.ComputeBrowserExamKey();
@@ -1513,6 +1515,7 @@ namespace SebWindowsConfig
 				// Update URL filter rules, also the seb-Browser white/blacklist keys, 
 				// which are necessary for compatibility to SEB 2.1.x
 				urlFilter.UpdateFilterRules();
+				settingsReplaced = true;
 				UpdateAllWidgetsOfProgram();
 			}
 			// Generate Browser Exam Key of this new settings

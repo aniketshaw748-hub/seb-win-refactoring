@@ -101,20 +101,82 @@ namespace SebWindowsConfig.Entities
 		}
 
 		/// <summary>
-		/// True if the rule allows every Google Form (or more of Google), not just one form.
+		/// True if the rule lets students open Google Forms other than one specific form. It is checked the way SEB
+		/// matches rules, against links to made-up forms, so any spelling of a broad rule is caught.
 		/// </summary>
 		internal static bool AllowsAllGoogleForms(string rule)
 		{
-			var match = Regex.Match(rule ?? "", @"^(?:[a-z][a-z0-9+.-]*://)?\.?(?<host>[^/:?#]+)(?::\d+)?(?<path>/[^?#]*)?$", RegexOptions.IgnoreCase);
-			var host = match.Groups["host"].Value.ToLowerInvariant();
-			var path = match.Groups["path"].Value.ToLowerInvariant().TrimEnd('/');
+			var otherForms = new[]
+			{
+				"https://docs.google.com/forms/d/e/1FAIpQLSdOtherForm00000000/viewform",
+				"https://docs.google.com/forms/u/0/d/e/1FAIpQLSdOtherForm00000000/viewform",
+				"https://docs.google.com/forms/d/1OtherFormEditId000000000/viewform"
+			};
 
-			if (!match.Success || (host != "docs.google.com" && host != "google.com"))
+			return otherForms.Any(url => Matches(rule, url));
+		}
+
+		/// <summary>
+		/// Whether an allow rule matches a link, following the browser's simplified rule matching (SimplifiedRule in
+		/// SafeExamBrowser.Browser): optional scheme, host (a leading dot means exactly this host, otherwise subdomains
+		/// match too), optional port and path, with * matching anything.
+		/// </summary>
+		internal static bool Matches(string rule, string url)
+		{
+			if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || string.IsNullOrWhiteSpace(rule))
 			{
 				return false;
 			}
 
-			return path == "" || path == "/*" || path == "/forms" || path == "/forms/*" || path.StartsWith("/forms/u/*/*") || path.StartsWith("/forms/d/*");
+			var parts = Regex.Match(rule.Trim(), @"(?:([^\:]*)\://)?(?:([^\:\@]*)(?:\:([^\@]*))?\@)?(?:([^/\:\?#]*))?(?:\:([0-9\*]*))?([^\?#]*)?(?:\?([^#]*))?(?:#(.*))?");
+			var scheme = parts.Groups[1].Value;
+			var host = parts.Groups[4].Value;
+			var port = parts.Groups[5].Value;
+			var path = parts.Groups[6].Value;
+
+			if (scheme.Length > 0 && !Anchored(Wildcard(scheme)).IsMatch(uri.Scheme))
+			{
+				return false;
+			}
+
+			var exactHost = host.StartsWith(".");
+			var hostPattern = Wildcard(exactHost ? host.Substring(1) : host);
+
+			if (!exactHost && !Regex.IsMatch(host, "^[a-zA-Z0-9]+$"))
+			{
+				hostPattern = @"(.+?\.)*" + hostPattern;
+			}
+
+			if (!Anchored(hostPattern).IsMatch(uri.Host))
+			{
+				return false;
+			}
+
+			if (int.TryParse(port, out var number) && number != uri.Port)
+			{
+				return false;
+			}
+
+			if (!string.IsNullOrWhiteSpace(path) && path != "/")
+			{
+				var pathPattern = Wildcard(path);
+
+				pathPattern = pathPattern.EndsWith("/") ? pathPattern + "?" : pathPattern + "/?";
+
+				return Anchored(pathPattern).IsMatch(uri.AbsolutePath);
+			}
+
+			return true;
+		}
+
+		private static string Wildcard(string expression)
+		{
+			return Regex.Escape(expression).Replace(@"\*", ".*");
+		}
+
+		private static Regex Anchored(string pattern)
+		{
+			return new Regex($"^{pattern}$", RegexOptions.IgnoreCase);
 		}
 
 		/// <summary>
