@@ -654,9 +654,15 @@ namespace SebWindowsConfig.Controls
 		private bool RefreshSiteAccess(bool settingsReplaced)
 		{
 			var access = host.SiteAccess;
-			var examRules = SiteAccess.ExamSiteRules(host.StartUrl);
+			var examRules = UsableExamRules(host.StartUrl);
 			var untouched = !access.Restricted && !access.IsCustom && access.AllowedSites.Count == 0;
 			var restrictByDefault = settingsReplaced && host.IsNewConfiguration && untouched;
+
+			// Rules quick setup made for the previous settings say nothing about new ones.
+			if (settingsReplaced)
+			{
+				ownedExamRules = null;
+			}
 
 			// A restricted policy without the rules quick setup would make for this exam link (e.g. only one path of the
 			// exam site) can't be shown here without changing what it allows, so it counts as custom too.
@@ -696,16 +702,28 @@ namespace SebWindowsConfig.Controls
 				return;
 			}
 
-			var examRules = SiteAccess.ExamSiteRules(urlTextBox.Text);
+			var examRules = UsableExamRules(urlTextBox.Text);
 
-			// A link SEB's rules can't express (e.g. an IPv6 address) would only produce an unusable rule.
-			if (examRules.Any(r => !SiteAccess.IsValidSite(r)))
+			if (examRules.Count == 0)
 			{
-				return;
+				// No usable exam link yet (empty, half typed or an IPv6 address): keep the rules for the last full link
+				// until a usable one replaces them.
+				examRules = ownedExamRules ?? new List<string>();
 			}
 
 			ownedExamRules = examRules;
 			host.SetSiteAccess(onlyExamSiteCard.Checked, examRules.Concat(ExtraSites()));
+		}
+
+		/// <summary>
+		/// The exam-site rules for a link, or none if the link has none that SEB's rules can express (e.g. it is empty or
+		/// an IPv6 address).
+		/// </summary>
+		private static IList<string> UsableExamRules(string url)
+		{
+			var rules = SiteAccess.ExamSiteRules(url);
+
+			return rules.Count > 0 && rules.All(SiteAccess.IsValidSite) ? rules : new List<string>();
 		}
 
 		/// <summary>

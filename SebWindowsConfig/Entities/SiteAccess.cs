@@ -106,12 +106,11 @@ namespace SebWindowsConfig.Entities
 		/// </summary>
 		internal static bool AllowsAllGoogleForms(string rule)
 		{
-			var otherForms = new[]
-			{
-				"https://docs.google.com/forms/d/e/1FAIpQLSdOtherForm00000000/viewform",
-				"https://docs.google.com/forms/u/0/d/e/1FAIpQLSdOtherForm00000000/viewform",
-				"https://docs.google.com/forms/d/1OtherFormEditId000000000/viewform"
-			};
+			// Every route to a form: published (/d/e/ID) and editor (/d/ID) links, without and with an account slot (/u/N/).
+			var prefixes = new[] { "" }.Concat(Enumerable.Range(0, 10).Select(n => $"u/{n}/"));
+			var forms = new[] { "d/e/1FAIpQLSdOtherForm00000000", "d/1OtherFormEditId000000000" };
+			var pages = new[] { "viewform", "formResponse" };
+			var otherForms = prefixes.SelectMany(p => forms.SelectMany(f => pages.Select(page => $"https://docs.google.com/forms/{p}{f}/{page}")));
 
 			return otherForms.Any(url => Matches(rule, url));
 		}

@@ -670,6 +670,24 @@ namespace SebWindowsConfig
 			checkBoxEnableURLContentFilter.Checked = false;
 		}
 
+		/// <summary>
+		/// Before saving: with URL filtering on, the start URL must be a link the filter rules can express. An IPv6 address
+		/// can't be, so SEB would block the exam itself. Shows why and returns false in that case.
+		/// </summary>
+		private bool IsStartUrlFilterable()
+		{
+			var filtering = SEBSettings.settingsCurrent.TryGetValue(SEBSettings.KeyURLFilterEnable, out var value) && value is bool on && on;
+
+			if (filtering && Uri.TryCreate(textBoxStartURL.Text.Trim(), UriKind.Absolute, out var uri) && uri.HostNameType == UriHostNameType.IPv6)
+			{
+				MessageBox.Show(this, "The exam link is an IPv6 address, which SEB's website rules can't express, so SEB would block the exam. Use a host name for the exam link instead (e.g. http://localhost:8080), or switch off URL filtering.", "Check the exam link", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+
+				return false;
+			}
+
+			return true;
+		}
+
 		bool IQuickSetupHost.IsNewConfiguration => currentPathSebConfigFile == SEBUIStrings.settingsTitleDefaultSettings;
 
 		SecurityPreset IQuickSetupHost.CurrentPreset => SecurityPreset.Detect(SEBSettings.settingsCurrent);

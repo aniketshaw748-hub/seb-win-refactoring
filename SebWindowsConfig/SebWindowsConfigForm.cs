@@ -1321,6 +1321,7 @@ namespace SebWindowsConfig
 		{
 			// Check if there are unconfirmed passwords, if yes show an alert and abort saving
 			if (ArePasswordsUnconfirmed()) return false;
+			if (!IsStartUrlFilterable()) return false;
 
 			StringBuilder sebClientSettingsAppDataBuilder = new StringBuilder(currentDireSebConfigFile).Append(@"\").Append(currentFileSebConfigFile);
 			String fileName = sebClientSettingsAppDataBuilder.ToString();
@@ -1377,6 +1378,7 @@ namespace SebWindowsConfig
 		{
 			// Check if there are unconfirmed passwords, if yes show an alert and abort saving
 			if (ArePasswordsUnconfirmed()) return;
+			if (!IsStartUrlFilterable()) return;
 
 			// Set the default directory and file name in the File Dialog
 			saveFileDialogSebConfigFile.InitialDirectory = currentDireSebConfigFile;
