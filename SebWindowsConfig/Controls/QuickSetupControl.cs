@@ -54,7 +54,6 @@ namespace SebWindowsConfig.Controls
 		private Button signInButton;
 		private Label shortLinkHint;
 		private bool sitesCustom;
-		private bool siteChoiceMade;
 
 		private ToggleSwitch allowQuitSwitch;
 		private PasswordFields quitPassword;
@@ -82,7 +81,9 @@ namespace SebWindowsConfig.Controls
 		/// <summary>
 		/// Reads the current configuration from the host into all steps, e.g. after a file was opened.
 		/// </summary>
-		internal void RefreshFromHost()
+		/// <param name="settingsReplaced">True after the editor loaded other settings (opened, reverted, saved), false
+		/// when the quick setup is merely shown again.</param>
+		internal void RefreshFromHost(bool settingsReplaced = false)
 		{
 			var restrictSites = false;
 
@@ -92,7 +93,7 @@ namespace SebWindowsConfig.Controls
 			{
 				urlTextBox.Text = host.StartUrl ?? "";
 				examKeysSwitch.Checked = host.SendsExamKeys;
-				restrictSites = RefreshSiteAccess();
+				restrictSites = RefreshSiteAccess(settingsReplaced);
 				allowQuitSwitch.Checked = host.AllowQuit;
 				quitPassword.Refresh(host);
 				adminPassword.Refresh(host);
@@ -418,8 +419,8 @@ namespace SebWindowsConfig.Controls
 			statusRow.Controls.Add(urlFixButton);
 			page.Controls.Add(statusRow);
 
-			examKeysSwitch = new ToggleSwitch("Let the exam site check that students use SEB", "Needed when your Moodle quiz (or another exam system) requires Safe Exam Browser: SEB then proves to the site that it runs with this file, and the site refuses other browsers. Google Forms can't check this.", PageWidth);
-			examKeysSwitch.AccessibleName = "Let the exam site check that students use SEB";
+			examKeysSwitch = new ToggleSwitch("Send SEB's exam keys to the exam site", "Turn this on if your exam system checks for SEB, e.g. a Moodle quiz set to require Safe Exam Browser. The keys prove that SEB runs with this file. The check itself is done by the exam site, so it only helps if the site is set up to require SEB; Google Forms can't do that.", PageWidth);
+			examKeysSwitch.AccessibleName = "Send SEB's exam keys to the exam site";
 			examKeysSwitch.CheckedChanged += (o, e) =>
 			{
 				if (!refreshing)
@@ -452,6 +453,10 @@ namespace SebWindowsConfig.Controls
 			else if (IsValidUrl(text))
 			{
 				SetStatus(urlStatus, "✓  Looks good", Theme.Success);
+			}
+			else if (Uri.TryCreate(text, UriKind.Absolute, out var parsed) && parsed.HostNameType == UriHostNameType.IPv6)
+			{
+				SetStatus(urlStatus, "SEB can't limit students to an IPv6 address. Use a host name instead, e.g. http://localhost:8080", Theme.Warning);
 			}
 			else if (suggestion != text && IsValidUrl(suggestion))
 			{
@@ -500,6 +505,12 @@ namespace SebWindowsConfig.Controls
 				return false;
 			}
 
+			// SEB's website rules can't express IPv6 addresses ([::1]), so the exam site couldn't be allowed.
+			if (uri.HostNameType == UriHostNameType.IPv6)
+			{
+				return false;
+			}
+
 			return uri.Host.Contains('.') || uri.IsLoopback;
 		}
 
@@ -536,7 +547,6 @@ namespace SebWindowsConfig.Controls
 				{
 					if (!refreshing && current.Checked)
 					{
-						siteChoiceMade = true;
 						ApplySiteAccess();
 					}
 
@@ -567,7 +577,7 @@ namespace SebWindowsConfig.Controls
 			examSiteLabel.Margin = new Padding(0, 0, 0, 4);
 			list.Controls.Add(examSiteLabel);
 
-			shortLinkHint = Theme.WrappingLabel("This is a short forms.gle link, so SEB can't tell which form it leads to and has to allow every Google Form. Paste the full form link (docs.google.com/forms/...) in step 1 to allow only your form.", PageWidth, Theme.Small, Theme.Warning);
+			shortLinkHint = Theme.WrappingLabel("These rules allow every Google Form, not only yours. Paste the full link to your form (docs.google.com/forms/d/.../viewform) in step 1, and remove any broad Google line below, to allow only your form.", PageWidth, Theme.Small, Theme.Warning);
 			shortLinkHint.Margin = new Padding(0, 0, 0, 4);
 			list.Controls.Add(shortLinkHint);
 			list.Controls.Add(Spacer(12));
@@ -616,22 +626,26 @@ namespace SebWindowsConfig.Controls
 			siteListPanel = list;
 			page.Controls.Add(list);
 
-			page.Controls.Add(Tip("Test it: open the saved file in SEB and click a few links on your exam page. A blocked link shows a message instead of the page. SEB checks every page students open; things your exam page shows inside itself, like an embedded video, aren't checked."));
+			page.Controls.Add(Tip("Test it: open the saved file in SEB and click a few links on your exam page. A blocked link shows a message instead of the page. SEB checks the pages students open, not websites shown inside your exam page: an embedded site (e.g. a help centre) keeps its working links, so don't embed other websites in the exam."));
 
 			return page;
 		}
 
 		/// <summary>
-		/// Reads the allowed websites from the settings. Returns true if new settings should start with "Only the exam
-		/// site" (the caller applies it once refreshing is done); settings opened from a file keep their own choice.
+		/// Reads the allowed websites from the settings; it never changes them. Returns true if the settings were just
+		/// replaced by new, untouched settings, which should start with "Only the exam site" (the caller applies that once
+		/// refreshing is done). Settings opened from a file keep their own choice.
 		/// </summary>
-		private bool RefreshSiteAccess()
+		private bool RefreshSiteAccess(bool settingsReplaced)
 		{
 			var access = host.SiteAccess;
 			var examRules = SiteAccess.ExamSiteRules(host.StartUrl);
-			var restrictByDefault = !siteChoiceMade && host.IsNewConfiguration && !access.Restricted && !access.IsCustom && access.AllowedSites.Count == 0;
+			var untouched = !access.Restricted && !access.IsCustom && access.AllowedSites.Count == 0;
+			var restrictByDefault = settingsReplaced && host.IsNewConfiguration && untouched;
 
-			sitesCustom = access.IsCustom;
+			// A restricted policy without the rules quick setup would make for this exam link (e.g. only one path of the
+			// exam site) can't be shown here without changing what it allows, so it counts as custom too.
+			sitesCustom = access.IsCustom || (access.Restricted && !examRules.All(r => access.AllowedSites.Contains(r, StringComparer.OrdinalIgnoreCase)));
 			onlyExamSiteCard.Checked = access.Restricted || restrictByDefault;
 			anySiteCard.Checked = !onlyExamSiteCard.Checked;
 			extraSitesBox.Text = string.Join(Environment.NewLine, access.AllowedSites.Where(s => !examRules.Contains(s, StringComparer.OrdinalIgnoreCase)));
@@ -654,10 +668,23 @@ namespace SebWindowsConfig.Controls
 		}
 
 		/// <summary>
-		/// Called when the exam link was typed in All settings: the exam site rule follows it there too.
+		/// Called when the exam link was typed in All settings: the exam site rule follows it there too. The current rules
+		/// are read first (they may have been edited in All settings), and only the rules quick setup made for the
+		/// previous link are swapped; anything else is left as it is.
 		/// </summary>
 		internal void OnStartUrlChangedElsewhere()
 		{
+			var previousExamRules = SiteAccess.ExamSiteRules(urlTextBox.Text);
+			var access = host.SiteAccess;
+			var ownRules = !access.IsCustom && previousExamRules.All(r => access.AllowedSites.Contains(r, StringComparer.OrdinalIgnoreCase));
+
+			if (ownRules && (access.Restricted || access.AllowedSites.Count > 0))
+			{
+				var others = access.AllowedSites.Where(s => !previousExamRules.Contains(s, StringComparer.OrdinalIgnoreCase)).ToList();
+
+				host.SetSiteAccess(access.Restricted, SiteAccess.ExamSiteRules(host.StartUrl).Concat(others));
+			}
+
 			var wasRefreshing = refreshing;
 
 			refreshing = true;
@@ -665,13 +692,13 @@ namespace SebWindowsConfig.Controls
 			try
 			{
 				urlTextBox.Text = host.StartUrl ?? "";
+				RefreshSiteAccess(false);
 			}
 			finally
 			{
 				refreshing = wasRefreshing;
 			}
 
-			ApplySiteAccess();
 			UpdateSiteFields();
 			UpdateRail();
 		}
@@ -692,7 +719,6 @@ namespace SebWindowsConfig.Controls
 			try
 			{
 				sitesCustom = false;
-				siteChoiceMade = true;
 				onlyExamSiteCard.Checked = true;
 				extraSitesBox.Text = "";
 			}
@@ -746,9 +772,9 @@ namespace SebWindowsConfig.Controls
 
 			examSiteLabel.Text = examRules.Count == 0 ? "Your exam site (add the exam link in step 1)" : string.Join(", ", examRules.Select(SiteAccess.Display)) + "   (your exam)";
 			examSiteLabel.ForeColor = examRules.Count == 0 ? Theme.MutedText : Theme.Text;
-			shortLinkHint.Visible = SiteAccess.IsShortFormLink(urlTextBox.Text);
+			shortLinkHint.Visible = examRules.Concat(ExtraSites()).Any(SiteAccess.AllowsAllGoogleForms);
 
-			SetStatus(extraSitesStatus, invalid == 0 ? "" : invalid == 1 ? "One line isn't a website and is ignored. Use a site name like example.com: no spaces, no * in the name, and a port from 1 to 65535." : $"{invalid} lines aren't websites and are ignored. Use site names like example.com: no spaces, no * in the name, and a port from 1 to 65535.", Theme.Warning);
+			SetStatus(extraSitesStatus, invalid == 0 ? "" : invalid == 1 ? "One line isn't a website and is ignored. Use a site name like example.com: no spaces, no * or @, and a port from 1 to 65535." : $"{invalid} lines aren't websites and are ignored. Use site names like example.com: no spaces, no * or @, and a port from 1 to 65535.", Theme.Warning);
 			extraSitesStatus.Visible = invalid > 0;
 
 			signInHint.Visible = signIn != null && !ExtraSites().Contains(signIn.Site, StringComparer.OrdinalIgnoreCase);
@@ -1022,7 +1048,7 @@ namespace SebWindowsConfig.Controls
 			{
 				Tuple.Create(IsValidUrl(url), IsValidUrl(url) ? "Opens " + Shorten(url, 70) : "No valid exam link yet"),
 				Tuple.Create(sitesCustom || onlyExamSiteCard.Checked, SitesSummary(false)),
-				Tuple.Create(true, examKeysSwitch.Checked ? "The exam site can check that students use SEB" : "The exam site doesn't check for SEB (students could open it in another browser)"),
+				Tuple.Create(true, examKeysSwitch.Checked ? "SEB sends its exam keys, so an exam site set up to require SEB can check it" : "SEB doesn't send its exam keys with each page (turn this on for a Moodle quiz that requires SEB)"),
 				Tuple.Create(true, QuitSummary()),
 				Tuple.Create(true, tools.Count == 0 ? "No extra tools for students" : "Students can use: " + string.Join(", ", tools)),
 				Tuple.Create(true, preset == null ? "Custom lockdown settings" : preset.Title + " lockdown"),

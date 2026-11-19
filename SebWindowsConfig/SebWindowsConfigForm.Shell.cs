@@ -52,6 +52,11 @@ namespace SebWindowsConfig
 		private bool shellReady;
 		private bool applyingQuickSetup;
 
+		/// <summary>
+		/// True while all widgets are updated from the settings (e.g. a file is opened), so widget events then aren't edits.
+		/// </summary>
+		private bool reloadingWidgets;
+
 		private void InitialiseShell()
 		{
 			SuspendLayout();
@@ -70,7 +75,7 @@ namespace SebWindowsConfig
 			// Only a link the user types counts (the box has the focus), not one set while settings are loaded.
 			textBoxStartURL.TextChanged += (o, e) =>
 			{
-				if (textBoxStartURL.Focused)
+				if (textBoxStartURL.Focused && !reloadingWidgets && !applyingQuickSetup)
 				{
 					quickSetup.OnStartUrlChangedElsewhere();
 				}
@@ -116,6 +121,8 @@ namespace SebWindowsConfig
 		/// </summary>
 		private void OnSettingsReloaded(bool keepStoredPasswords = false)
 		{
+			reloadingWidgets = false;
+
 			if (!shellReady)
 			{
 				return;
@@ -131,7 +138,8 @@ namespace SebWindowsConfig
 
 			if (!applyingQuickSetup)
 			{
-				quickSetup.RefreshFromHost();
+				// A preset reloads widgets but keeps the configuration; anything else may have replaced it.
+				quickSetup.RefreshFromHost(settingsReplaced: !keepStoredPasswords);
 			}
 		}
 

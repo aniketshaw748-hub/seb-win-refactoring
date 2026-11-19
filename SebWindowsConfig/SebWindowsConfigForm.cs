@@ -292,6 +292,8 @@ namespace SebWindowsConfig
 		// *****************************************************
 		private void UpdateAllWidgetsOfProgram()
 		{
+			reloadingWidgets = true;
+
 			// Update the filename in the title bar
 			this.Text = this.ProductName;
 			this.Text += " - ";

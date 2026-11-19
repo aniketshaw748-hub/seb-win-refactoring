@@ -101,11 +101,20 @@ namespace SebWindowsConfig.Entities
 		}
 
 		/// <summary>
-		/// True for a short Google Forms link, which can't be limited to one form.
+		/// True if the rule allows every Google Form (or more of Google), not just one form.
 		/// </summary>
-		internal static bool IsShortFormLink(string startUrl)
+		internal static bool AllowsAllGoogleForms(string rule)
 		{
-			return TryParse(startUrl, out var uri) && uri.Host.Equals("forms.gle", StringComparison.OrdinalIgnoreCase);
+			var match = Regex.Match(rule ?? "", @"^(?:[a-z][a-z0-9+.-]*://)?\.?(?<host>[^/:?#]+)(?::\d+)?(?<path>/[^?#]*)?$", RegexOptions.IgnoreCase);
+			var host = match.Groups["host"].Value.ToLowerInvariant();
+			var path = match.Groups["path"].Value.ToLowerInvariant().TrimEnd('/');
+
+			if (!match.Success || (host != "docs.google.com" && host != "google.com"))
+			{
+				return false;
+			}
+
+			return path == "" || path == "/*" || path == "/forms" || path == "/forms/*" || path.StartsWith("/forms/u/*/*") || path.StartsWith("/forms/d/*");
 		}
 
 		/// <summary>
@@ -147,7 +156,8 @@ namespace SebWindowsConfig.Entities
 		/// </summary>
 		internal static bool IsValidSite(string site)
 		{
-			if (string.IsNullOrWhiteSpace(site) || site.Any(char.IsWhiteSpace))
+			// "@" would be read as a user name ("name@host"), so the rule wouldn't mean what it looks like.
+			if (string.IsNullOrWhiteSpace(site) || site.Any(char.IsWhiteSpace) || site.Contains('@'))
 			{
 				return false;
 			}
